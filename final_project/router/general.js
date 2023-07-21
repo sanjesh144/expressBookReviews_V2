@@ -1,116 +1,232 @@
-const express = require('express');
-let books = require("./booksdb.js");
-let isValid = require("./auth_users.js").isValid;
-let users = require("./auth_users.js").users;
-const public_users = express.Router();
+const express = require('express')
+let books = require('./booksdb.js')
+let isValid = require('./auth_users.js').isValid
+let users = require('./auth_users.js').users
+const public_users = express.Router()
+const jwt = require('jsonwebtoken')
+const session = require('express-session')
+//const axios = require('axios')
 
+public_users.use(
+	session({secret: 'fingerpint'}, (resave = true), (saveUninitialized = true))
+)
 
-public_users.post("/register", (req, res) => {
-    const { username, password } = req.body;
-  
-    if (!username || !password) {
-      return res.status(400).json({ message: "Username and password are required" });
-    }
-  
-    if (!isValid(username)) {
-      return res.status(400).json({ message: "Invalid username" });
-    }
-  
-    if (users.some((user) => user.username === username)) {
-      return res.status(409).json({ message: "Username already exists" });
-    }
-  
-    const newUser = { username, password };
-    users.push(newUser);
-  
-    return res.status(201).json({ message: "User registered successfully" });
-  });
+public_users.post('/register', (req, res) => {
+	const username = req.body.username
+	const password = req.body.password
+
+	if (username && password) {
+		if (!isValid(username)) {
+			users.push({username: username, password: password})
+			return res.status(200).json({
+				message: 'User successfully registered. Now you can login',
+			})
+		} else {
+			return res.status(404).json({message: 'User already exists!'})
+		}
+	}
+	return res.status(404).json({message: 'Unable to register user.'})
+})
+
+//////////////////////////////////////////////////////////
+// ASYNC ALL GET ALL BOOKS
+//////////////////////////////////////////////////////////
+
+const getAllBooks = async () => {
+	try {
+		const allBooksPromise = await Promise.resolve(books)
+		if (allBooksPromise) {
+			return allBooksPromise
+		} else {
+			return Promise.reject(new Error('No books found.'))
+		}
+	} catch (err) {
+		console.log(err)
+	}
+}
+//////////////////////////////////////////////////////////
 
 // Get the book list available in the shop
-public_users.get('/',function (req, res) {
-    const bookList = Object.values(books); // Convert the books object into an array of values
 
-    const formattedBookList = JSON.stringify(bookList, null, 2);
+public_users.get('/', async function (req, res) {
+	const data = await getAllBooks()
+	res.json(data)
+})
+//////////////////////////////////////////////////////////
 
-    return res.status(300).send(`<pre>${formattedBookList}</pre>`);
-});
+//////////////////////////////////////////////////////////
+// ASYNC GET BOOK DETAILS BY ISBN
+//////////////////////////////////////////////////////////
 
-// get by ISBN
-public_users.get('/isbn/:isbn', function (req, res) {
-    const isbn = req.params.isbn; // Get the ISBN from the request parameters
-  
-    // Find the book with the given ISBN in the books database
-    const book = books[isbn];
-  
-    if (book) {
-      return res.status(300).json({ message: "Multiple choices", options: [book] });
-    } else {
-      return res.status(404).json({ message: "Book not found" });
-    }
-  });
-  
-  
-  
+const getBooksDetailsByISBN = async isbn => {
+	try {
+		const ISBNPromise = await Promise.resolve(isbn)
+		if (ISBNPromise) {
+			return Promise.resolve(isbn)
+		} else {
+			return Promise.reject(new Error('Could not retrieve ISBN Promise.'))
+		}
+	} catch (error) {
+		console.log(error)
+	}
+}
+//////////////////////////////////////////////////////////
+
+// Get book details based on ISBN
+public_users.get('/isbn/:isbn', async (req, res) => {
+	const isbn = req.params.isbn;
+    console.log(isbn);
+	const data = await getBooksDetailsByISBN(isbn)
+	res.send(books[data])
+})
+//////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////
+// ASYNC BOOK DETAILS BASED ON AUTHOR
+//////////////////////////////////////////////////////////
+
+const findAuthor = async author => {
+	try {
+		if (author) {
+			const newAuthorArray = []
+			Object.values(books).map(book => {
+				if (book.author === author) {
+					newAuthorArray.push(book)
+				}
+			})
+			return Promise.resolve(newAuthorArray)
+		} else {
+			return Promise.reject(
+				new Error('Could not retrieve Author Promise.')
+			)
+		}
+	} catch (error) {
+		console.log(error)
+	}
+}
+//////////////////////////////////////////////////////////
+
 // Get book details based on author
-public_users.get('/author/:author', function (req, res) {
-    const authorName = req.params.author; // Get the author name from the request parameters
-    const booksByAuthor = []; // To store books that match the provided author
-  
-    // Iterate through the 'books' object to find books with matching author
-    Object.values(books).forEach((book) => {
-      if (book.author === authorName) {
-        booksByAuthor.push(book);
-      }
-    });
-  
-    if (booksByAuthor.length > 0) {
-      return res.status(300).json({
-        message: "Multiple choices",
-        options: booksByAuthor
-      });
-    } else {
-      return res.status(404).json({ message: "Books by this author not found" });
-    }
-  });
-  
+public_users.get('/author/:author', async (req, res) => {
+	const author = req.params.author
+	const data = await findAuthor(author)
+	res.send(data)
+})
+//////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////
+// ASYNC BOOK DETAILS BASED ON TITLE
+//////////////////////////////////////////////////////////
+
+const findTitle = async title => {
+	try {
+		if (title) {
+			const newTitleArray = []
+			Object.values(books).map(book => {
+				if (book.title === title) {
+					newTitleArray.push(book)
+				}
+			})
+			return Promise.resolve(newTitleArray)
+		} else {
+			return Promise.reject(
+				new Error('Could not retrieve Author Promise.')
+			)
+		}
+	} catch (error) {
+		console.log(error)
+	}
+}
+//////////////////////////////////////////////////////////
 
 // Get all books based on title
-public_users.get('/title/:title', function (req, res) {
-    const title = req.params.title; // Get the title from the request parameters
-    const bookKeys = Object.keys(books); // Obtain all the keys (book identifiers) from the 'books' object
-  
-    // Initialize an array to store book details with the given title
-    const booksByTitle = [];
-  
-    // Iterate through the 'books' array & check if the title matches the one provided in the request parameters
-    bookKeys.forEach((key) => {
-      const book = books[key];
-      if (book.title === title) {
-        booksByTitle.push(book);
-      }
-    });
-  
-    if (booksByTitle.length > 0) {
-      return res.status(300).json({ message: "Multiple choices", options: booksByTitle });
-    } else {
-      return res.status(404).json({ message: "No books found with this title" });
-    }
-  });
-  
+public_users.get('/title/:title', async (req, res) => {
+	const title = req.params.title
+	const data = await findTitle(title)
+	res.send(data)
+})
+//////////////////////////////////////////////////////////
 
 //  Get book review
 public_users.get('/review/:isbn', function (req, res) {
-    const isbn = req.params.isbn; // Get the ISBN from the request parameters
-  
-    // Find the book with the given ISBN in the books database
-    const book = books[isbn];
-  
-    if (book) {
-      const reviews = book.reviews || []; // Get the reviews for the book or an empty array if no reviews exist
-      return res.status(300).json({ message: "Book reviews", reviews });
-    } else {
-      return res.status(404).json({ message: "Book not found" });
-    }
-  });
-  
-module.exports.general = public_users;
+	const reviewISBN = req.params.isbn
+
+	Object.entries(books).map(book => {
+		if (book[0] === reviewISBN) {
+			res.send(book[1].reviews)
+		}
+	})
+})
+
+///////////////////////////////////////////////////////////////////////////////
+
+const authenticatedUser = (username, password) => {
+	//returns boolean
+	const matchingUsers = users.filter(
+		user => user.username === username && user.password === password
+	)
+	return matchingUsers.length > 0
+}
+
+///////////////////////////////////////////////////////////////////////////////
+public_users.post('/login', (req, res) => {
+	const username = req.body.username
+	const password = req.body.password
+
+	if (!username || !password) {
+		return res.status(404).json({message: 'Error logging in'})
+	}
+
+	if (authenticatedUser(username, password)) {
+		let accessToken = jwt.sign(
+			{
+				data: password,
+			},
+			'access',
+			{expiresIn: 60 * 60}
+		)
+
+		req.session.authorization = {
+			accessToken,
+			username,
+		}
+		return res.status(200).send('User successfully logged in')
+	} else {
+		return res
+			.status(208)
+			.json({message: 'Invalid Login. Check username and password'})
+	}
+})
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+public_users.put('/auth/review/:isbn', (req, res) => {
+	const isbn = req.params.isbn
+	const review = req.body.review
+	const username = req.session.authorization.username
+	if (books[isbn]) {
+		let book = books[isbn]
+		book.reviews[username] = review
+		return res.status(200).send('Review successfully posted')
+	} else {
+		return res.status(404).json({message: `ISBN ${isbn} not found`})
+	}
+})
+
+///////////////////////////////////////////////////////////////////////////////
+
+public_users.delete('/auth/review/:isbn', (req, res) => {
+	const isbn = req.params.isbn
+	const username = req.session.authorization.username
+	if (books[isbn]) {
+		let book = books[isbn]
+		delete book.reviews[username]
+		return res.status(200).send('Review successfully deleted')
+	} else {
+		return res.status(404).json({message: `ISBN ${isbn} not found`})
+	}
+})
+///////////////////////////////////////////////////////////////////////////////
+
+module.exports.general = public_users
